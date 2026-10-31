@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Historieboken – Åk 6</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Lexend:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- React & Babel via CDN -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        body { font-family: 'Plus Jakarta Sans', sans-serif; margin: 0; padding: 0; }
+
+        .custom-scrollbar::-webkit-scrollbar { width: 8px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 20px; border: 4px solid transparent; background-clip: content-box; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        #root { height: 100vh; display: flex; overflow: hidden; }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(6px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .animate-fade-in {
+            animation: fadeIn 0.2s ease-out forwards;
+        }
+
+        .sidebar-transition {
+            transition: width 0.3s ease-in-out, opacity 0.2s ease-in-out;
+        }
+
+        /* Typsnitt för läsytan */
+        .font-standard {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+        }
+        .font-lexend {
+            font-family: 'Lexend', sans-serif;
+            letter-spacing: 0.025em;
+            word-spacing: 0.06em;
+        }
+
+        /* Bakgrundsteman för läskortet (färgkontraster inspirerade av Exam.net) */
+        .reader-theme-standard {
+            background-color: #ffffff;
+            color: #1e293b;
+            border-color: #e2e8f0;
+        }
+        .reader-theme-gul {
+            background-color: #fef9c3;
+            color: #1c1917;
+            border-color: #fef08a;
+        }
+        .reader-theme-turkos {
+            background-color: #ccfbf1;
+            color: #134e4a;
+            border-color: #99f6e4;
+        }
+        .reader-theme-kram {
+            background-color: #fef3c7;
+            color: #451a03;
+            border-color: #fde68a;
+        }
+        .reader-theme-bla {
+            background-color: #e0f2fe;
+            color: #0c4a6e;
+            border-color: #bae6fd;
+        }
+        .reader-theme-rosa {
+            background-color: #fce7f3;
+            color: #701a75;
+            border-color: #fbcfe8;
+        }
+        .reader-theme-gra {
+            background-color: #e2e8f0;
+            color: #0f172a;
+            border-color: #cbd5e1;
+        }
+        .reader-content p,
+.reader-content li {
+    font-size: var(--reader-font-size);
+}
+
+.reader-content h2 {
+    font-size: calc(var(--reader-font-size) * 1.5);
+}
+
+.reader-content h3 {
+    font-size: calc(var(--reader-font-size) * 1.3);
+}
+        
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-900">
+    <div id="root"></div>
+
+    <!-- Historiebokens datafil -->
+    <script src="./blocks-data.js"></script>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        const BLOCKS = window.BLOCKS_DATA || [];
+
+        // Färgteman för läsytan
+        const COLOR_THEMES = [
+            { id: "standard", name: "Standard (Vit)", bg: "#ffffff", border: "#cbd5e1" },
+            { id: "gul", name: "Ljusgul", bg: "#fef9c3", border: "#fef08a" },
+            { id: "turkos", name: "Ljusturkos", bg: "#ccfbf1", border: "#99f6e4" },
+            { id: "kram", name: "Kräm / Varmvit", bg: "#fef3c7", border: "#fde68a" },
+            { id: "bla", name: "Ljusblå", bg: "#e0f2fe", border: "#bae6fd" },
+            { id: "rosa", name: "Ljusrosa", bg: "#fce7f3", border: "#fbcfe8" },
+            { id: "gra", name: "Mjukgrå", bg: "#e2e8f0", border: "#cbd5e1" }
+        ];
+
+        function App() {
+            const [activeBlock, setActiveBlock] = useState(0);
+            const [activeSection, setActiveSection] = useState(0);
+            // Standardstorlek för Åk 6: 1.15em (ca 18-19px)
+            const [fontScale, setFontScale] = useState(1.15);
+            const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+
+            // Läslägesinställningar med minne (localStorage)
+            const [fontFamily, setFontFamily] = useState(() => {
+                try { return localStorage.getItem("reader_font") || "standard"; } catch(e) { return "standard"; }
+            });
+            const [colorTheme, setColorTheme] = useState(() => {
+                try { return localStorage.getItem("reader_theme") || "standard"; } catch(e) { return "standard"; }
+            });
+            const [showSettings, setShowSettings] = useState(false);
+
+            const mainScrollRef = useRef(null);
+
+            const block = BLOCKS[activeBlock] || BLOCKS[0] || { title: "", sections: [] };
+            const sections = block.sections || [];
+            const section = sections[activeSection] || sections[0] || { title: "", page: "", text: "" };
+
+            // Kontrollera om eleven är på absolut första eller sista sidan
+            const isFirstOverall = activeBlock === 0 && activeSection === 0;
+            const isLastOverall = activeBlock === BLOCKS.length - 1 && activeSection === (sections.length - 1);
+
+            const handleFontChange = (font) => {
+                setFontFamily(font);
+                try { localStorage.setItem("reader_font", font); } catch (e) {}
+            };
+
+            const handleThemeChange = (theme) => {
+                setColorTheme(theme);
+                try { localStorage.setItem("reader_theme", theme); } catch (e) {}
+            };
+
+            // Rulla alltid upp till toppen vid sid- eller blockbyte
+            useEffect(() => {
+                if (mainScrollRef.current) {
+                    mainScrollRef.current.scrollTop = 0;
+                }
+            }, [activeBlock, activeSection]);
+
+            // Uppdatera Lucide-ikoner
+            useEffect(() => {
+                if (window.lucide?.createIcons) {
+                    try {
+                        window.lucide.createIcons();
+                    } catch (e) {
+                        console.warn("Lucide render fail:", e);
+                    }
+                }
+}, [activeBlock, activeSection, isSidebarOpen]);
+            // Navigering framåt över kapitelgränser
+            const goToNextSection = () => {
+                if (activeSection < sections.length - 1) {
+                    setActiveSection(activeSection + 1);
+                } else if (activeBlock < BLOCKS.length - 1) {
+                    setActiveBlock(activeBlock + 1);
+                    setActiveSection(0);
+                }
+            };
+
+            // Navigering bakåt över kapitelgränser
+            const goToPrevSection = () => {
+                if (activeSection > 0) {
+                    setActiveSection(activeSection - 1);
+                } else if (activeBlock > 0) {
+                    const prevBlockIdx = activeBlock - 1;
+                    const prevSections = BLOCKS[prevBlockIdx]?.sections || [];
+                    setActiveBlock(prevBlockIdx);
+                    setActiveSection(Math.max(0, prevSections.length - 1));
+                }
+            };
+
+            // Parser som formaterar textens rubriker, faktarutor, bildtexter, frågor och listor
+            const renderFormattedBody = (rawText) => {
+                const text = String(rawText || "").replace(/\r\n/g, "\n");
+                const blocks = text.split(/\n{2,}/);
+
+                return blocks.map((chunk, blockIdx) => {
+                    const trimmed = chunk.trim();
+                    if (!trimmed) return null;
+
+                    // 1. Huvudrubriker (inleds med #)
+                    if (/^#{1,3}\s+(.+)$/.test(trimmed)) {
+                        const title = trimmed.replace(/^#{1,3}\s+/, '');
+                        return (
+                            <h2 key={blockIdx} className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight pt-4 pb-2 border-b border-black/10">
+                                {title}
+                            </h2>
+                        );
+                    }
+
+                    // 2. Korta mellanrubriker
+                    if (
+                        trimmed.length < 60 &&
+                        !trimmed.endsWith('.') &&
+                        !trimmed.endsWith(':') &&
+                        !trimmed.startsWith('(') &&
+                        !trimmed.startsWith('[') &&
+                        !trimmed.startsWith('*') &&
+                        !trimmed.startsWith('-') &&
+                        !trimmed.includes('\n')
+                    ) {
+                        return (
+                            <h3 key={blockIdx} className="text-xl md:text-2xl font-black text-slate-900 pt-3 pb-1">
+                                {trimmed}
+                            </h3>
+                        );
+                    }
+
+                    // 3. Faktarutor
+                    if (
+                        trimmed.toLowerCase().includes("faktaruta") ||
+                        trimmed.toLowerCase().includes("kan du jordbruksorden") ||
+                        trimmed.toLowerCase().includes("vad är en fördom") ||
+                        trimmed.toLowerCase().includes("viktiga ord")
+                    ) {
+                        return (
+                            <div key={blockIdx} className="my-5 p-5 bg-amber-500/10 border-l-4 border-amber-500 rounded-2xl">
+                                <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-amber-800 mb-2">
+                                    <i data-lucide="info" className="w-4 h-4"></i>
+                                    <span>Faktaruta</span>
+                                </div>
+                                <div className="text-sm md:text-base leading-relaxed whitespace-pre-wrap">
+                                    {trimmed}
+                                </div>
+                            </div>
+                        );
+                    }
+
+                    // 4. Frågor från boken
+                    if (
+                        trimmed.startsWith("?") ||
+                        trimmed.toLowerCase().startsWith("frågor") ||
+                        trimmed.includes("FRÅGOR") ||
+                        trimmed.startsWith("1.") && trimmed.includes("?")
+                    ) {
+                        return (
+                            <div key={blockIdx} className="my-5 p-5 bg-sky-500/10 border-l-4 border-sky-600 rounded-2xl">
+                                <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-sky-900 mb-2">
+                                    <i data-lucide="help-circle" className="w-4 h-4"></i>
+                                    <span>Frågor från boken</span>
+                                </div>
+                                <div className="text-sm md:text-base leading-relaxed font-semibold whitespace-pre-wrap">
+                                    {trimmed}
+                                </div>
+                            </div>
+                        );
+                    }
+
+                    // 5. Bildtexter och källhänvisningar
+                    if (
+                        trimmed.startsWith("(Bildtext") ||
+                        trimmed.startsWith("(Foto") ||
+                        trimmed.startsWith("*(Bildtext") ||
+                        trimmed.startsWith("Foto:")
+                    ) {
+                        return (
+                            <aside key={blockIdx} className="my-3 p-3.5 bg-black/5 rounded-xl border border-black/5 text-xs md:text-sm italic opacity-85">
+                                <span className="font-bold not-italic block text-[10px] uppercase tracking-wider mb-1 text-slate-500">Bildinformation</span>
+                                {trimmed}
+                            </aside>
+                        );
+                    }
+
+                    // 6. Punktlistor
+                    if (trimmed.split("\n").every(line => /^[\*\-•]\s+/.test(line.trim()))) {
+                        const items = trimmed.split("\n");
+                        return (
+                            <ul key={blockIdx} className="my-3 space-y-2 list-none pl-2">
+                                {items.map((it, itemIdx) => (
+                                    <li key={itemIdx} className="flex items-start gap-2 text-base md:text-lg leading-relaxed">
+                                        <span className="text-amber-500 font-black mt-1.5 text-xs">●</span>
+                                        <span>{it.replace(/^[\*\-•]\s+/, '')}</span>
+                                    </li>
+                                ))}
+                            </ul>
+                        );
+                    }
+
+                    // 7. Vanligt brödtextstycke
+                    return (
+                        <p key={blockIdx} className="text-base md:text-lg leading-[1.9] font-medium whitespace-pre-wrap">
+                            {trimmed}
+                        </p>
+                    );
+                });
+            };
+
+            return (
+                <div className="flex w-full h-full text-left">
+                    {/* Vänstermeny: 8 historiska block */}
+                    <aside className={`bg-white border-r flex flex-col shrink-0 z-30 sidebar-transition ${isSidebarOpen ? 'w-80 opacity-100' : 'w-0 opacity-0 overflow-hidden'}`}>
+                        <div className="p-6 bg-slate-900 text-white flex flex-col items-start">
+                            <div className="flex items-center gap-3">
+                                <span className="bg-amber-500 p-2.5 rounded-2xl text-slate-900 shadow-sm">
+                                    <i data-lucide="book-open" className="w-5 h-5"></i>
+                                </span>
+                                <div>
+                                    <h1 className="text-lg font-black uppercase tracking-tight leading-none">Historieboken</h1>
+                                    <p className="text-[10px] mt-1 text-slate-400 uppercase font-bold tracking-widest">Sveriges historia Åk 6</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <nav className="flex-1 p-3 overflow-y-auto custom-scrollbar space-y-1">
+                            {BLOCKS.map((b, i) => (
+                                <button
+                                    key={i}
+                                    onClick={() => { setActiveBlock(i); setActiveSection(0); }}
+                                    className={`w-full flex items-center gap-3 p-3.5 rounded-2xl transition-all font-bold text-xs ${
+                                        activeBlock === i
+                                            ? 'bg-amber-50 text-amber-900 ring-2 ring-amber-200 shadow-sm'
+                                            : 'text-slate-600 hover:bg-slate-100'
+                                    }`}
+                                >
+                                    <span className={`p-2 rounded-xl shrink-0 ${activeBlock === i ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                                        <i data-lucide={b.icon || "landmark"} className="w-4 h-4"></i>
+                                    </span>
+                                    <span className="leading-snug text-left">{b.title}</span>
+                                </button>
+                            ))}
+                        </nav>
+
+                        <div className="p-4 border-t bg-slate-50 text-center">
+                            <span className="text-[11px] font-bold text-slate-400">1718 – ca 1900</span>
+                        </div>
+                    </aside>
+
+                    {/* Huvudyta: Header med sidnummer + läsyta */}
+                    <main className="flex-1 flex flex-col bg-white overflow-hidden">
+                        {/* Header: Sidflikar med originalbokens sidor */}
+                        <header className="bg-white/95 border-b p-3.5 flex items-center justify-between z-20 shrink-0 shadow-sm">
+                            <div className="flex items-center gap-3 overflow-hidden">
+                                <button
+                                    onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                                    title={isSidebarOpen ? "Dölj meny" : "Visa meny"}
+                                    className="p-2.5 bg-slate-100 hover:bg-slate-200 rounded-xl text-slate-700 shrink-0 transition-colors"
+                                >
+                                    <i data-lucide={isSidebarOpen ? "panel-left-close" : "panel-left-open"} className="w-4 h-4"></i>
+                                </button>
+
+                                <div className="flex gap-2 overflow-x-auto no-scrollbar py-0.5">
+                                    {sections.map((s, i) => (
+                                        <button
+                                            key={i}
+                                            onClick={() => setActiveSection(i)}
+                                            className={`px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-wider whitespace-nowrap transition-all ${
+                                                activeSection === i
+                                                    ? 'bg-slate-900 text-white shadow-md ring-2 ring-slate-900/20'
+                                                    : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                                            }`}
+                                        >
+                                            {s.title}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="bg-amber-100 text-amber-900 px-3.5 py-1.5 rounded-xl text-[11px] font-black uppercase border border-amber-200 shrink-0 ml-2">
+                                Sida {section.page}
+                            </div>
+                        </header>
+
+                        {/* Läsyta för bokens text */}
+                        <div ref={mainScrollRef} className="flex-1 overflow-y-auto custom-scrollbar p-6 md:p-10 bg-slate-100/60">
+                            <div className="max-w-3xl mx-auto space-y-6 pb-20">
+
+                                {/* Läskortet – styrs av valt typsnitt och bakgrundsfärg */}
+<article
+    style={{
+        backgroundColor: COLOR_THEMES.find(t => t.id === colorTheme)?.bg || "#ffffff",
+        borderColor: COLOR_THEMES.find(t => t.id === colorTheme)?.border || "#e2e8f0"
+    }}
+    className={`p-8 md:p-12 rounded-3xl shadow-md border relative animate-fade-in ${fontFamily === 'lexend' ? 'font-lexend' : 'font-standard'}`}
+>                                    <div className="absolute top-0 left-0 w-2.5 h-full bg-amber-500 rounded-l-3xl"></div>
+
+                                    {/* Textkontroller: Teckenstorlek + Läslägesknapp */}
+                                    <div className="flex flex-wrap items-center justify-between gap-3 pb-6 mb-6 border-b border-black/10">
+                                        <div className="flex items-center gap-2">
+                                            {/* Teckenstorlek */}
+                                            <div className="flex items-center gap-1 bg-black/5 p-1 rounded-xl">
+                                                <button
+                                                    onClick={() => setFontScale(Math.max(0.9, fontScale - 0.1))}
+                                                    className="px-3 py-1 rounded-lg text-xs font-black hover:bg-white transition-colors"
+                                                    title="Mindre text"
+                                                >
+                                                    A-
+                                                </button>
+                                                <button
+                                                    onClick={() => setFontScale(1.15)}
+                                                    className="px-3 py-1 rounded-lg text-xs font-black hover:bg-white transition-colors"
+                                                    title="Återställ textstorlek (Åk 6 standard)"
+                                                >
+                                                    A
+                                                </button>
+                                                <button
+                                                    onClick={() => setFontScale(Math.min(1.7, fontScale + 0.1))}
+                                                    className="px-3 py-1 rounded-lg text-xs font-black hover:bg-white transition-colors"
+                                                    title="Större text"
+                                                >
+                                                    A+
+                                                </button>
+                                            </div>
+
+                                            {/* Inställningsknapp för läsläge (färg & typsnitt) */}
+                                            <div className="relative">
+                                                <button
+                                                    onClick={() => setShowSettings(!showSettings)}
+                                                    className="px-3.5 py-1.5 bg-black/5 hover:bg-black/10 rounded-xl text-xs font-black flex items-center gap-1.5 transition-colors"
+                                                    title="Anpassa läsläge (färg och typsnitt)"
+                                                >
+                                                    <i data-lucide="sliders" className="w-3.5 h-3.5"></i>
+                                                    Läsläge
+                                                </button>
+
+                                                {/* Popup-meny för läsläge */}
+                                                {showSettings && <div className="fixed inset-0 z-40" onClick={() => setShowSettings(false)}></div>}{showSettings && (
+                                                    <div className="absolute left-0 mt-2 w-72 bg-white text-slate-800 p-4 rounded-2xl shadow-xl border border-slate-200 z-50 animate-fade-in font-standard">
+                                                        <div className="flex items-center justify-between pb-2 mb-3 border-b border-slate-100">
+                                                            <span className="text-xs font-black uppercase tracking-wider text-slate-500">Läsanpassning</span>
+                                                            <button onClick={() => setShowSettings(false)} className="text-slate-400 hover:text-slate-600">
+                                                                <i data-lucide="x" className="w-4 h-4"></i>
+                                                            </button>
+                                                        </div>
+
+                                                        {/* Typsnittsval */}
+                                                        <div className="mb-4">
+                                                            <label className="text-[11px] font-bold text-slate-600 block mb-2">Typsnitt:</label>
+                                                            <div className="grid grid-cols-2 gap-1.5">
+                                                                <button
+                                                                    onClick={() => handleFontChange("standard")}
+                                                                    className={`px-3 py-2 rounded-xl text-xs font-bold border text-center transition-all ${fontFamily === "standard" ? "bg-slate-900 text-white border-slate-900" : "bg-slate-50 border-slate-200 hover:bg-slate-100"}`}
+                                                                >
+                                                                    Standard
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => handleFontChange("lexend")}
+                                                                    className={`px-3 py-2 rounded-xl text-xs font-bold border text-center font-lexend transition-all ${fontFamily === "lexend" ? "bg-slate-900 text-white border-slate-900" : "bg-slate-50 border-slate-200 hover:bg-slate-100"}`}
+                                                                    title="Lexend – utformat med tydliga bokstavsformer och öppna avstånd"
+                                                                >
+                                                                    Tydlig text
+                                                                </button>
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Bakgrundsfärger */}
+                                                        <div>
+                                                            <label className="text-[11px] font-bold text-slate-600 block mb-2">Bakgrundsfärg:</label>
+                                                            <div className="grid grid-cols-4 gap-2">
+                                                                {COLOR_THEMES.map((t) => (
+                                                                    <button
+                                                                        key={t.id}
+                                                                        onClick={() => handleThemeChange(t.id)}
+                                                                        style={{ backgroundColor: t.bg, borderColor: t.border }}
+                                                                        className={`h-9 rounded-xl border-2 transition-all relative flex items-center justify-center ${colorTheme === t.id ? "ring-2 ring-slate-900 ring-offset-1" : "hover:scale-105"}`}
+                                                                        title={t.name}
+                                                                    >
+                                                                        {colorTheme === t.id && (
+                                                                            <i data-lucide="check" className="w-3.5 h-3.5 text-slate-900"></i>
+                                                                        )}
+                                                                    </button>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Boksidans formaterade text */}
+                                    <div
+    className="space-y-4 cursor-text select-text reader-content"
+    style={{ "--reader-font-size": `${fontScale}rem` }}
+>
+                                        {renderFormattedBody(section.text)}
+                                    </div>
+                                </article>
+
+                                {/* Bläddra fram/tillbaka längst ned (navigerar över blockgränser) */}
+                                <div className="flex justify-between items-center pt-2 font-standard">
+                                    <button
+                                        disabled={isFirstOverall}
+                                        onClick={goToPrevSection}
+                                        className={`px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 transition-all ${
+                                            isFirstOverall
+                                                ? 'opacity-30 cursor-not-allowed text-slate-400'
+                                                : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 shadow-sm'
+                                        }`}
+                                    >
+                                        <i data-lucide="arrow-left" className="w-4 h-4"></i> Föregående sida
+                                    </button>
+
+                                    <button
+                                        disabled={isLastOverall}
+                                        onClick={goToNextSection}
+                                        className={`px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 transition-all ${
+                                            isLastOverall
+                                                ? 'opacity-30 cursor-not-allowed text-slate-400'
+                                                : 'bg-slate-900 text-white hover:bg-slate-800 shadow-sm'
+                                        }`}
+                                    >
+                                        Nästa sida <i data-lucide="arrow-right" className="w-4 h-4"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </main>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
